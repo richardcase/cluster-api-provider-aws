@@ -90,7 +90,7 @@ PULL_POLICY ?= Always
 LDFLAGS := $(shell source ./hack/version.sh; version::ldflags)
 
 # 'functional tests' as the ginkgo filter will run ALL tests ~ 2 hours @ 3 node concurrency.
-E2E_FOCUS ?= "functional tests"
+E2E_FOCUS ?= "functional tests - unmanaged"
 # Instead, you can run a quick smoke test, it should run fast (9 minutes)...
 # E2E_FOCUS := "Create cluster with name having"
 
@@ -116,9 +116,13 @@ test-e2e: $(GINKGO) $(KIND) $(SSM_PLUGIN) $(KUSTOMIZE) e2e-image ## Run e2e test
 e2e-image:
 ifndef FASTBUILD
 	docker build -f Dockerfile --tag="gcr.io/k8s-staging-cluster-api/capa-manager:e2e" .
+	docker build -f Dockerfile --tag="gcr.io/k8s-staging-cluster-api/capa-eks-boostrap-manager:e2e" --build-arg package=./bootstrap/eks  .
+	docker build -f Dockerfile --tag="gcr.io/k8s-staging-cluster-api/capa-eks-controlplane-manager:e2e" --build-arg package=./controlplane/eks  .
 else
 	$(MAKE) managers
-	docker build -f Dockerfile.fastbuild --tag="gcr.io/k8s-staging-cluster-api/capa-manager:e2e" .
+	docker build -f Dockerfile.fastbuild --tag="gcr.io/k8s-staging-cluster-api/capa-manager:e2e" --build-arg managerbin=manager .
+	docker build -f Dockerfile.fastbuild --tag="gcr.io/k8s-staging-cluster-api/capa-eks-boostrap-manager:e2e" --build-arg managerbin=eks-bootstrap-manager  .
+	docker build -f Dockerfile.fastbuild --tag="gcr.io/k8s-staging-cluster-api/capa-eks-controlplane-manager:e2e" --build-arg managerbin=eks-controlplane-manager  .
 endif
 
 CONFORMANCE_E2E_ARGS ?= -kubetest.config-file=$(KUBETEST_CONF_PATH)

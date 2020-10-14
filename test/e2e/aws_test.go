@@ -70,11 +70,11 @@ type statefulSetInfo struct {
 	volMountPath              string
 }
 
-var _ = Describe("functional tests", func() {
+var _ = Describe("functional tests - unmanaged", func() {
 	var (
 		namespace *corev1.Namespace
 		ctx       context.Context
-		specName  = "functional-tests"
+		specName  = "functional tests - unmanaged"
 	)
 
 	BeforeEach(func() {
