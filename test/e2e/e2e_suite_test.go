@@ -81,6 +81,9 @@ var (
 	// skipCleanup prevents cleanup of test resources e.g. for debug purposes.
 	skipCleanup bool
 
+	// skipCloudFormationCreation will skip the cloudformation execution - useful for debugging e2e tests
+	skipCloudFormationCreation bool
+
 	// skipCloudFormationDeletion prevents the deletion of the AWS CloudFormation stack
 	skipCloudFormationDeletion bool
 )
@@ -144,6 +147,7 @@ func init() {
 	flag.BoolVar(&useExistingCluster, "use-existing-cluster", false, "if true, the test uses the current cluster instead of creating a new one (default discovery rules apply)")
 	flag.BoolVar(&skipCleanup, "skip-cleanup", false, "if true, the resource cleanup after tests will be skipped")
 	flag.BoolVar(&skipCloudFormationDeletion, "skip-cloudformation-deletion", false, "if true, an AWS CloudFormation stack will not be deleted")
+	flag.BoolVar(&skipCloudFormationCreation, "skip-cloudformation-creation", false, "if true, an AWS CloudFormation stack will not be created")
 }
 
 type synchronizedBeforeTestSuiteConfig struct {
@@ -183,8 +187,10 @@ var _ = SynchronizedBeforeSuite(func() []byte {
 	)
 	Expect(err).NotTo(HaveOccurred())
 	awsSession = newAWSSession()
-	createCloudFormationStack(awsSession, getBootstrapTemplate())
-	ensureNoServiceLinkedRoles(awsSession)
+	if !skipCloudFormationCreation {
+		createCloudFormationStack(awsSession, getBootstrapTemplate())
+	}
+	//ensureNoServiceLinkedRoles(awsSession)
 	ensureSSHKeyPair(awsSession, defaultSSHKeyPairName)
 	bootstrapAccessKey = newUserAccessKey(awsSession, getBootstrapTemplate().Spec.BootstrapUser.UserName)
 
@@ -395,6 +401,8 @@ func newBootstrapTemplate() *cfn_bootstrap.Template {
 	region, err := credentials.ResolveRegion("")
 	Expect(err).NotTo(HaveOccurred())
 	t.Spec.Region = region
+	t.Spec.EKS.Enable = true
+	t.Spec.EKS.DefaultControlPlaneRole.Disable = false
 	str, err := yaml.Marshal(t.Spec)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(ioutil.WriteFile(path.Join(artifactFolder, "awsiamconfiguration.yaml"), str, 0644)).To(Succeed())
