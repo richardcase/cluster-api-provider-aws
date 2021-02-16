@@ -93,6 +93,11 @@ type AWSManagedControlPlaneSpec struct {
 	// +optional
 	IAMAuthenticatorConfig *IAMAuthenticatorConfig `json:"iamAuthenticatorConfig,omitempty"`
 
+	//OIDCProviderConfig allows the specification of a OIDC provider to associate with the
+	// EKS cluster so that it can be used for authentication.
+	// +optional
+	OIDCProviderConfig *OIDCProviderConfig `json:"oidcProviderConfig,omitempty"`
+
 	// Endpoints specifies access to this cluster's control plane endpoints
 	// +optional
 	EndpointAccess EndpointAccess `json:"endpointAccess,omitempty"`
