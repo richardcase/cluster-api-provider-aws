@@ -93,10 +93,11 @@ type AWSManagedControlPlaneSpec struct {
 	// +optional
 	IAMAuthenticatorConfig *IAMAuthenticatorConfig `json:"iamAuthenticatorConfig,omitempty"`
 
-	//OIDCProviderConfig allows the specification of a OIDC provider to associate with the
-	// EKS cluster so that it can be used for authentication.
+	// OIDCAuthConfig allows the specification of a OIDC provider to associate with the
+	// EKS cluster so that it can be used for when authenticating user to the cluster. This is
+	// an additional option over the IAM based authentication.
 	// +optional
-	OIDCProviderConfig *OIDCProviderConfig `json:"oidcProviderConfig,omitempty"`
+	OIDCAuthConfig *OIDCAuthConfig `json:"oidcProviderAuthConfig,omitempty"`
 
 	// Endpoints specifies access to this cluster's control plane endpoints
 	// +optional
@@ -219,6 +220,9 @@ type AWSManagedControlPlaneStatus struct {
 	// Addons holds the current status of the EKS addons
 	// +optional
 	Addons []*AddonState `json:"addons,omitempty"`
+	// Updates contains details of any updates for the cluster
+	// +optional
+	Updates []*Update `json:"updates,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -344,8 +344,8 @@ spec:
                         type: object
                     type: object
                 type: object
-              oidcProviderConfig:
-                description: OIDCProviderConfig allows the specification of a OIDC provider to associate with the EKS cluster so that it can be used for authentication.
+              oidcProviderAuthConfig:
+                description: OIDCAuthConfig allows the specification of a OIDC provider to associate with the EKS cluster so that it can be used for when authenticating user to the cluster. This is an additional option over the IAM based authentication.
                 properties:
                   clientId:
                     description: ClientID is the ID for the client application that makes authentication requests to the OpenID identity provider. This is also known as the `audience`.
@@ -431,7 +431,7 @@ spec:
                     issues:
                       description: Issues is a list of issue associated with the addon
                       items:
-                        description: AddonIssue represents an issue with an addon
+                        description: Issue represents an issue or error
                         properties:
                           code:
                             description: Code is the issue code
@@ -830,6 +830,49 @@ spec:
                 default: false
                 description: Ready denotes that the AWSManagedControlPlane API Server is ready to receive requests and that the VPC infra is ready.
                 type: boolean
+              updates:
+                description: Updates contains details of any updates for the cluster
+                items:
+                  description: Update represents an update to the EKS cluster
+                  properties:
+                    createdAt:
+                      format: date-time
+                      type: string
+                    id:
+                      type: string
+                    issues:
+                      description: Issues is a list of issue associated with the update
+                      items:
+                        description: Issue represents an issue or error
+                        properties:
+                          code:
+                            description: Code is the issue code
+                            type: string
+                          message:
+                            description: Message is the textual description of the issue
+                            type: string
+                          resourceIds:
+                            description: ResourceIDs is a list of resource ids for the issue
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      type: array
+                    params:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - createdAt
+                  - id
+                  - status
+                  - type
+                  type: object
+                type: array
             required:
             - ready
             type: object

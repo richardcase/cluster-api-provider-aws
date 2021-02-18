@@ -35,11 +35,11 @@ func AddonSDKToAddonState(eksAddon *eks.Addon) *ekscontrolplanev1.AddonState {
 		ModifiedAt:            metav1.NewTime(*eksAddon.ModifiedAt),
 		Status:                eksAddon.Status,
 		ServiceAccountRoleArn: eksAddon.ServiceAccountRoleArn,
-		Issues:                []*ekscontrolplanev1.AddonIssue{},
+		Issues:                []*ekscontrolplanev1.Issue{},
 	}
 	if eksAddon.Health != nil {
 		for _, issue := range eksAddon.Health.Issues {
-			addonState.Issues = append(addonState.Issues, &ekscontrolplanev1.AddonIssue{
+			addonState.Issues = append(addonState.Issues, &ekscontrolplanev1.Issue{
 				Code:        issue.Code,
 				Message:     issue.Message,
 				ResourceIDs: issue.ResourceIds,
@@ -49,3 +49,67 @@ func AddonSDKToAddonState(eksAddon *eks.Addon) *ekscontrolplanev1.AddonState {
 
 	return addonState
 }
+
+// UpdateSDKToUpdate will convert an AWS SDK EKS Update to a control plane Update
+func UpdateSDKToUpdate(sdkUpdate *eks.Update) *ekscontrolplanev1.Update {
+	update := &ekscontrolplanev1.Update{
+		ID:        *sdkUpdate.Id,
+		CreatedAt: metav1.NewTime(*sdkUpdate.CreatedAt),
+		Status:    aws.StringValue(sdkUpdate.Status),
+		Type:      aws.StringValue(sdkUpdate.Type),
+		Params:    map[string]string{},
+	}
+	issues := []*ekscontrolplanev1.Issue{}
+	for _, updateErr := range sdkUpdate.Errors {
+		issues = append(issues, ErrorDetailSDKToIssue(updateErr))
+	}
+	for _, param := range sdkUpdate.Params {
+		update.Params[*param.Type] = *param.Value
+	}
+
+	return update
+}
+
+func ErrorDetailSDKToIssue(errorDetails *eks.ErrorDetail) *ekscontrolplanev1.Issue {
+	return &ekscontrolplanev1.Issue{
+		Code:        errorDetails.ErrorCode,
+		Message:     errorDetails.ErrorMessage,
+		ResourceIDs: errorDetails.ResourceIds,
+	}
+}
+
+// func MapSDKUpdateStatus(status *string) *ekscontrolplanev1.UpdateStatus {
+// 	switch *status {
+// 	case eks.UpdateStatusInProgress:
+// 		return &ekscontrolplanev1.UpdateStatusInProgress
+// 	case eks.UpdateStatusSuccessful:
+// 		return &ekscontrolplanev1.UpdateStatusSuccessful
+// 	case eks.UpdateStatusFailed:
+// 		return &ekscontrolplanev1.UpdateStatusFailed
+// 	case eks.UpdateStatusCancelled:
+// 		return &ekscontrolplanev1.UpdateStatusCancelled
+// 	default:
+// 		return nil
+// 	}
+// }
+
+// func MapSDKUpdateType(updateType *string) *ekscontrolplanev1.UpdateType {
+// 	switch *updateType {
+// 	case eks.UpdateTypeAddonUpdate:
+// 		return &ekscontrolplanev1.UpdateTypeAddon
+// 	case eks.UpdateTypeConfigUpdate:
+// 		return &ekscontrolplanev1.UpdateTypeConfig
+// 	case eks.UpdateTypeLoggingUpdate:
+// 		return &ekscontrolplanev1.UpdateTypeLogging
+// 	case eks.UpdateTypeEndpointAccessUpdate:
+// 		return &ekscontrolplanev1.UpdateTypeEndpointAccess
+// 	case eks.UpdateTypeVersionUpdate:
+// 		return &ekscontrolplanev1.UpdateTypeVersion
+// 	case eks.UpdateTypeAssociateIdentityProviderConfig:
+// 		return &ekscontrolplanev1.UpdateTypeOIDCAssociate
+// 	case eks.UpdateTypeDisassociateIdentityProviderConfig:
+// 		return &ekscontrolplanev1.UpdateTypeOIDCDisassociate
+// 	default:
+// 		return nil
+// 	}
+// }

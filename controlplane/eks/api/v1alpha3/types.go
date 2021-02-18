@@ -196,11 +196,11 @@ type AddonState struct {
 	// Status is the status of the addon
 	Status *string `json:"status,omitempty"`
 	// Issues is a list of issue associated with the addon
-	Issues []*AddonIssue `json:"issues,omitempty"`
+	Issues []*Issue `json:"issues,omitempty"`
 }
 
-// AddonIssue represents an issue with an addon
-type AddonIssue struct {
+// Issue represents an issue or error
+type Issue struct {
 	// Code is the issue code
 	Code *string `json:"code,omitempty"`
 	// Message is the textual description of the issue
@@ -215,8 +215,9 @@ const (
 	SecurityGroupCluster = infrav1.SecurityGroupRole("cluster")
 )
 
-// OIDCProviderConfig represents the configuration for a OIDC provider
-type OIDCProviderConfig struct {
+// OIDCAuthConfig represents the configuration for a OIDC provider that
+// will be used to authenticate users to the cluster
+type OIDCAuthConfig struct {
 	// ClientID is the ID for the client application that makes
 	// authentication requests to the OpenID identity provider.
 	// This is also known as the `audience`.
@@ -273,4 +274,39 @@ type OIDCProviderConfig struct {
 	// all prefixing.
 	// +optional
 	UsernamePrefix string `json:"usernamePrefix,omitempty"`
+}
+
+// UpdateStatus defines the update statuses
+// type UpdateStatus string
+
+// var (
+// 	UpdateStatusInProgress = UpdateStatus("in_progress")
+// 	UpdateStatusFailed     = UpdateStatus("failed")
+// 	UpdateStatusCancelled  = UpdateStatus("cancelled")
+// 	UpdateStatusSuccessful = UpdateStatus("successful")
+// )
+
+// UpdateType represents the type of update to the EKS cluster
+// type UpdateType string
+
+// var (
+// 	UpdateTypeVersion          = UpdateType("version")
+// 	UpdateTypeEndpointAccess   = UpdateType("endpoint_access")
+// 	UpdateTypeLogging          = UpdateType("logging")
+// 	UpdateTypeConfig           = UpdateType("config")
+// 	UpdateTypeOIDCAssociate    = UpdateType("oidc_associate")
+// 	UpdateTypeOIDCDisassociate = UpdateType("oidc_disassociate")
+// 	UpdateTypeAddon            = UpdateType("addon")
+// )
+
+// Update represents an update to the EKS cluster
+type Update struct {
+	ID        string      `json:"id"`
+	CreatedAt metav1.Time `json:"createdAt"`
+	Status    string      `json:"status"`
+	Type      string      `json:"type"`
+	// Issues is a list of issue associated with the update
+	Issues []*Issue          `json:"issues,omitempty"`
+	Params map[string]string `json:"params,omitempty"` //TODO: do we need the updateparams
+
 }
