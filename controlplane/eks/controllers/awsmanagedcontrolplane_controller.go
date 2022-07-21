@@ -40,13 +40,14 @@ import (
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/awsnode"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/ec2"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/eks"
+	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/gc"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/iamauth"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/kubeproxy"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/network"
 	"sigs.k8s.io/cluster-api-provider-aws/pkg/cloud/services/securitygroup"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/util"
-	"sigs.k8s.io/cluster-api/util/annotations"
+	capiannotations "sigs.k8s.io/cluster-api/util/annotations"
 	"sigs.k8s.io/cluster-api/util/conditions"
 	"sigs.k8s.io/cluster-api/util/predicates"
 )
@@ -72,6 +73,7 @@ type AWSManagedControlPlaneReconciler struct {
 	EnableIAM            bool
 	AllowAdditionalRoles bool
 	WatchFilterValue     string
+	ExternalResourceGC   bool
 }
 
 // SetupWithManager is used to setup the controller.
@@ -135,7 +137,7 @@ func (r *AWSManagedControlPlaneReconciler) Reconcile(ctx context.Context, req ct
 		return ctrl.Result{}, nil
 	}
 
-	if annotations.IsPaused(cluster, awsControlPlane) {
+	if capiannotations.IsPaused(cluster, awsControlPlane) {
 		log.Info("Reconciliation is paused for this object")
 		return ctrl.Result{}, nil
 	}
@@ -213,6 +215,13 @@ func (r *AWSManagedControlPlaneReconciler) reconcileNormal(ctx context.Context, 
 	authService := iamauth.NewService(managedScope, iamauth.BackendTypeConfigMap, managedScope.Client)
 	awsnodeService := awsnode.NewService(managedScope)
 	kubeproxyService := kubeproxy.NewService(managedScope)
+
+	if r.ExternalResourceGC {
+		gcSvc := gc.NewService(managedScope)
+		if gcErr := gcSvc.Reconcile(ctx); gcErr != nil {
+			return reconcile.Result{}, fmt.Errorf("failed reconciling gc service: %w", gcErr)
+		}
+	}
 
 	if err := networkSvc.ReconcileNetwork(); err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to reconcile network for AWSManagedControlPlane %s/%s: %w", awsManagedControlPlane.Namespace, awsManagedControlPlane.Name, err)
@@ -292,6 +301,15 @@ func (r *AWSManagedControlPlaneReconciler) reconcileDelete(ctx context.Context, 
 	if err := sgService.DeleteSecurityGroups(); err != nil {
 		log.Error(err, "error deleting general security groups for AWSManagedControlPlane", "namespace", controlPlane.Namespace, "name", controlPlane.Name)
 		return reconcile.Result{}, err
+	}
+
+	if r.ExternalResourceGC {
+		if controllerutil.ContainsFinalizer(managedScope.ControlPlane, expinfrav1.ExternalResourceGCFinalizer) {
+			gcSvc := gc.NewService(managedScope)
+			if gcErr := gcSvc.ReconcileDelete(ctx); gcErr != nil {
+				return reconcile.Result{}, fmt.Errorf("failed delete reconcile for gc service: %w", gcErr)
+			}
+		}
 	}
 
 	if err := networkSvc.DeleteNetwork(); err != nil {
