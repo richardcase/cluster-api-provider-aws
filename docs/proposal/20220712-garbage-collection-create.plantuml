@@ -12,10 +12,7 @@ activate InfraClusterController
 InfraClusterController -> InfraClusterController: Add infra cluster finalizer
 opt if gc feature enabled
     InfraClusterController -> gc_service: Reconcile
-    opt if gc annotation != false
-    else
-        gc_service -> gc_service: add gc finalizer
-    end
+    gc_service -> gc_service: add gc finalizer
 end
 InfraClusterController -> APIServer: patch infracluster
 InfraClusterController -> other_services: Reconcile

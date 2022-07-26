@@ -19,7 +19,9 @@ InfraClusterController -> other_services: Reconcile Delete
 other_services -> aws: Delete non-network infra
 opt if InfraCluster has gc finalizer
     InfraClusterController -> gc_service: ReconcileDelete
-    gc_service -> aws: Delete tenant created resources (lb/sg)
+    opt if gc annotation != false OR ""
+        gc_service -> aws: Delete tenant created resources (lb/sg)
+    end
     gc_service -> gc_service: remove gc finalizer
     gc_service -> APIServer: patch infracluster
 end

@@ -69,7 +69,7 @@ superseded-by: []
 
 ## Summary
 
-If you create a child cluster using CAPA which then in turn creates a `Service` of type `LoadBalancer` this results in a load balancer being created in AWS for that service. The type of load balancer created by default is a **Classic ELB** but you can also create a NLB by annotating your service. For example:
+If you create a workload cluster using CAPA which then in turn creates a `Service` of type `LoadBalancer` this results in a load balancer being created in AWS for that service. The type of load balancer created by default is a **Classic ELB** but you can also create a NLB by annotating your service. For example:
 
 ```yaml
 apiVersion: v1
@@ -80,7 +80,7 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
 ```
 
-If you try to delete the child/tenant cluster using CAPI/CAPA then it will fail to delete the clusters infrastructure fully in AWS as the VPC is still being using by the NLB that was created. For example:
+If you try to delete the workload cluster using CAPI/CAPA then it will fail to delete the clusters infrastructure fully in AWS as the VPC is still being used by the NLB that was created. For example:
 
 ```text
 E0609 15:49:16.022022  ###### API Changes) b │
@@ -88,9 +88,9 @@ E0609 15:49:16.022022  ###### API Changes) b │
 │ ControlPlane" "name"="capi-managed-test-control-plane" "namespace"="default" 
 ```
 
-Currently CAPA will attempt to delete all the resources it has directly created as part of the cluster lifecycle management. However, if the CCM in the child/tenant cluster has created any resources then these will not be attempted to be deleted.
+Currently CAPA will attempt to delete all the resources it has directly created as part of the cluster lifecycle management. However, if the CCM in the workload cluster has created any resources then these will not be attempted to be deleted.
 
-This proposal outlines a new feature that will be added to CAPA that will delete externally created resources, such as load balancers & security groups, of the child/tenant cluster. This will be referred to as **garbage collection".
+This proposal outlines a new feature that will be added to CAPA that will delete externally created resources, such as load balancers & security groups, of the workload cluster. This will be referred to as **garbage collection**.
 
 The new feature is expected to be compatible with unmanaged (i.e. EC2 control plane) and EKS CAPA created clusters.
 
@@ -98,13 +98,13 @@ The new feature is expected to be compatible with unmanaged (i.e. EC2 control pl
 
 Adopters of CAPA expect that a request to delete a cluster should succeed and preferably that there be no external AWS resources for that cluster orphaned.
 
-The traditional thinking is that a user should delete all the workloads on the cluster before deleteing the actual cluster. But the reality is that some clusters are short lived (testing & dev clusters are a good example) and this are normally delete via `kubectl delete Cluster mytest` without clearing the workloads from the cluster.
+The traditional thinking is that a user should delete all the workloads on the cluster before deleteing the actual cluster. But the reality is that some clusters are short lived (testing & dev clusters are a good example) and these are normally deleted via `kubectl delete Cluster mytest` without deleting the resources from the cluster first.
 
 This proposal aims to make this a better experience for the user of CAPA.
 
 ### Goals
 
-1. To delete AWS resources that where created by CCM in the child/tenant cluster.
+1. To delete AWS resources that where created by CCM in the workload cluster.
 2. To work across unmanaged (i.e. EC2 control plane) and managed (i.e. EKS) clusters.
 3. Solution must work in a scenario where GitOps is used.
 
@@ -131,7 +131,7 @@ So that there are no orphaned/unused AWS resources
 #### Story 2
 
 As a platform operator/engineer
-I want to be able to delete a cluster and all its associated AWS resources 
+I want to be able to delete a cluster and all its associated AWS resources
 When using a GitOps tools (like Flux/Argo)
 So that there are no orphaned/unused AWS resources
 
@@ -159,13 +159,13 @@ So that i can investigate/overcome issues
 
 <a name="FR4">FR4.</a> CAPA MUST support a way to opt-out of garbage collection at the point of cluster creation.
 
-<a name="FR5">FR5.</a> CAPI MUST not allow me to delete a cluster fullt until garbage collection has occurred.
+<a name="FR5">FR5.</a> CAPI MUST not allow me to delete a cluster fully until garbage collection has occurred.
 
 <a name="FR6">FR6.</a> CAPA SHOULD provide a way for me to opt-in or opt-out a cluster from garbage collection AFTER it has been created.
 
 ### Non-Functional
 
-<a name="NFR8">NFR8.</a> CAPA MUST be able to easily add additional AWS resource cleanup in the future.
+<a name="NFR8">NFR8.</a> CAPA MUST be able to easily add additional AWS resource clean up in the future.
 
 <a name="NFR9">NFR9.</a> Unit tests MUST exist for new garbage collection code.
 
@@ -175,11 +175,11 @@ So that i can investigate/overcome issues
 
 #### Proposed Changes
 
-In the initial implementation of garbage collection if the feature is enabled all clusters will by default be marked for garbage collection. But we will supply a means to opt-out at time of creation as per [FR4](#FR4).
+In the initial implementation of garbage collection if the feature is enabled all clusters will by default be marked for garbage collection. But we will supply a means to opt-out at any time prior to cluster deletion [FR4](#FR4).
 
 The proposed changes will be documented depending on if the cluster is being created/updated or deleted.
 
-> NOTE: garbage collection will be experimental initial and will be enabled via a feature flag.
+> NOTE: garbage collection will be experimental initially and will be enabled via a feature flag.
 
 ##### Cluster Creation
 
@@ -189,7 +189,7 @@ The following sequence diagram depicts what will happen when you create a new cl
 
 ###### API Changes
 
-If the garbage collection feature has been enabled via the feature flag then the point that a user can mark a cluster as opting out of garbage collection ([FR4](#FR4)) is when they apply the yaml (1). This will be accomplished by annotating the **AWSCluster** or **AWSManagedControlPlane** with the `aws.cluster.x-k8s.io/external-resource-gc` annotation and setting its value to **false**.
+If the garbage collection feature has been enabled via the feature flag then a user can mark a cluster as opting out of garbage collection ([FR4](#FR4)) when they apply the yaml (1). This will be accomplished by annotating the **AWSCluster** or **AWSManagedControlPlane** with the `aws.cluster.x-k8s.io/external-resource-gc` annotation and setting its value to **false**.
 
 If the `aws.cluster.x-k8s.io/external-resource-gc` annotation is absent or its value is set to **true** then the CAPA created cluster will be garbage collected.
 
@@ -207,20 +207,11 @@ After the gc service **Reconcile** has been called the normal provisioning of th
 
 ###### New Garbage Collection Service
 
-The logic of the actions to take when a cluster is created or deleted will be contained in a new garbage collection (gc_service) service.
+For cluster creation there will be a **Reconcile** function. Its purpose is to add a new finalizer (5) to the infra cluster called `awsexternalresourcegc.infrastructure.cluster.x-k8s.io` which marks it as a cluster that should be considered for garbage collection when its deleted. Whether a cluster actually needs to be garbage collected will be determined at cluster deletion time.
 
-For cluster creation there will be a **Reconcile** function. The purpose of this function is to determine if the cluster should be garbage collected and mark the infra cluster object accordingly.
-
-As mentioned previously a cluster will be garbage collected if either of these are true:
-
-- the `aws.cluster.x-k8s.io/external-resource-gc` annotation is absent
-- the `aws.cluster.x-k8s.io/external-resource-gc` and its value is set to **true**
-
-If the infra cluster is to be garbage collected (i.e. it satisfies one of these rules) then a new finalizer will be added (5) to the infra cluster called `awsexternalresourcegc.infrastructure.cluster.x-k8s.io`.
+By adding the finalizer we are stating that infra cluster has external resources that need deleting before the infra cluster object is deleted. the external resources in our case are the AWS resources created by the CCM of the workload cluster.
 
 This new finalizer will be persisted via the existing patching of the infra cluster (6).
-
-> NOTE: you will be able to check if a cluster is marked for garbage collection by looking at the finalizers on `AWSCluster` or `AWSManagedControlPlane`.
 
 ##### Cluster Deletion
 
@@ -230,29 +221,34 @@ The following sequence diagram depicts what will happen when you delete a new cl
 
 ###### Controller Changes
 
-The **reconcileDelete** of controllers for `AWSCluster` and `AWSManagedControlPlane` will be modified so that garbage collection will occur if the corresponding infra cluster object has the `awsexternalresourcegc.infrastructure.cluster.x-k8s.io` finalizer.
+The **reconcileDelete** of controllers for `AWSCluster` and `AWSManagedControlPlane` will be modified so that the garbage collecter will run if the corresponding infra cluster object has the `awsexternalresourcegc.infrastructure.cluster.x-k8s.io` finalizer.
 
 The point at which we do the garbage collection is important. If we do it too soon we run the risk of the resources being re-created in AWS. The **reconcileDelete** will have 3 distinct phases:
 
 - Delete CAPA owned AWS resources for cluster that are not related to the **NetworkSpec**. This will be done via the existing services in CAPA (5, 6).
-- If the infra cluster has the gc finalizer then **ReconcileDelete** will be called (7) on the new garbage collection service. Its the role of the garbage collection service to identify the CCM created AWS resources for the cluster and delete them (8).
+- If the infra cluster has the gc finalizer then **ReconcileDelete** will be called (7) on the new garbage collection service. Its the role of the garbage collection service to determine if GC should be done, identify the CCM created AWS resources for the cluster and delete them (8).
 - Delete CAPA owned AWS resources for that cluster that are related to the **NetworkSpec**. This will be done via the existing network service (11,12).
 
 ###### New Garbage Collection Service
 
-For cluster deletion there will be a **ReconcileDelete** function. The purpose of this function is to identify the AWS resources that have been created for the cluster via the CCM. And then for the identified resources delete them in AWS.
+For cluster deletion there will be a **ReconcileDelete** function. The first task of this function is to determine if the workload cluster's AWS resources should be garbage collected. The AWS resources will be garbage collected if either of these are true:
 
-To identify the resources that the CCM has created for the cluster we will use the **AWS resource tagging api** to query for all  resources that have a label called `kubernetes.io/cluster/[CLUSTERNAME]` with a value of `owned`. Note `[CLUSTERNAME]` will be replaced with the Kubernetes cluster name.
+- the `aws.cluster.x-k8s.io/external-resource-gc` annotation is absent
+- the `aws.cluster.x-k8s.io/external-resource-gc` annotation exists and its value is set to **true**
+
+If the AWS resources are to be garbage collected the next task of **ReconcileDelete** is to identify the AWS resources that have been created for the workload cluster via its CCM. And then for the identified resources delete them in AWS.
+
+To identify the resources that the CCM has created for the cluster we will use the **AWS Resource Tagging API** to query for all  resources that have a label called `kubernetes.io/cluster/[CLUSTERNAME]` with a value of `owned`. Note `[CLUSTERNAME]` will be replaced with the Kubernetes cluster name.
 
 Based on the list of resources returned we will group these by the owing AWS service (i.e. **ec2**, **elasticloadbalancing**). The grouped resources will then be passed to a function for that service which will take care of cleaning up the resources in AWS via API calls (8).
 
 The reason we are grouping by AWS service is that order can matter when deleting. For example, with the **elasticloadbalancing** service you need to delete the load balancers before any target groups.
 
-We will need to create the gc service so that its easy to add new cleanup functions for services in the future [NFR8](#NFR8).
+We will need to create the gc service so that its easy to add new clean up functions for services in the future [NFR8](#NFR8).
 
-Once all the resources have been cleaned up we can remove the `awsexternalresourcegc.infrastructure.cluster.x-k8s.io` finalizer (9) to indicate that the cluster has been garbage collected.
+Once all the resources have been cleaned up (or if opting out of gc) we can remove the `awsexternalresourcegc.infrastructure.cluster.x-k8s.io` finalizer (9) to indicate that the cluster has been garbage collected.
 
-> NOTE: we will initally not handle clean-up of EBS volumes due to the potential risk of accidental data deletion. This will be considered for a future enhancement.
+> NOTE: initially we will not handle clean-up of EBS volumes due to the potential risk of accidental data deletion. This will be considered for a future enhancement.
 
 ##### clusterawsadm changes
 
@@ -260,19 +256,19 @@ We would like to supply a way for the user to manually mark a cluster as requiri
 
 We will add 2 new commands to `clusterawsadm` to perform this:
 
-- **clusterawsadm gc enable** - this will add the new finalizer and annotation to the infra cluster object. 
-- **clusterawsadm gc disable** - this will remove the new finalizer and add/set the `aws.cluster.x-k8s.io/external-resource-gc` annotation to `false`.
+- **clusterawsadm gc enable** - this will add the `aws.cluster.x-k8s.io/external-resource-gc` annotation to the infra cluster object and set its value to `true`. If the gc finalizer is absent it will also add the finalizer (this could be the case for clusters created before enabling the feature)
+- **clusterawsadm gc disable** - this will add/set the `aws.cluster.x-k8s.io/external-resource-gc` annotation to `false`.
 
 ### Alternative Approaches Considered
 
 #### Using CCM to do the delete
 
-The initial implementation of the garbage collector relied on the CCM in the child/tenant cluster doing the delete. When a cluster is deleted CAPA would pause the delete reconciliation until garbage collection had been done.
+The initial implementation of the garbage collector relied on the CCM in the workload cluster doing the delete. When a cluster is deleted CAPA would pause the delete reconciliation until garbage collection had been done.
 
 The garbage collector (a separate controller) would:
 
 - Connect to the tenant cluster and get a list of `Services` of type `LoadBalancer`.
-- Delete each of the `Services` of type `LoadBalancer`. The CCM in the child/tenant cluster at this point will delete the resources it created in AWS.
+- Delete each of the `Services` of type `LoadBalancer`. The CCM in the workload cluster at this point will delete the resources it created in AWS.
 - Requeue until all the services as deleted.
 - Once all the services are delete mark the cluster has having been garbage collected.
 
@@ -291,11 +287,11 @@ After the cluster has been marked as garbage collected the normal delete reconci
 
 #### Replicating CCM
 
-As we are not relying on the CCM to do the deletion in means that we run the risk of replicating large parts of the CCM. To mitigate this we will only focus of cleaning up resources that can potentially block the CAPA deletion process.
+As we are not relying on the CCM to do the deletion it means that we run the risk of replicating large parts of the CCM. To mitigate this we will only focus on cleaning up resources that can potentially block the CAPA deletion process.
 
 #### Similar functionality in upstream CAPI
 
-There is the possibility that similar and more generalised functionality will be added to upstream CAPI. If this happens and it meets our needs then we will refactor this code to work with the new mechanism and if required deprecate this feature. To mitigate the impact we should keep this feature as experimental for longer that we would normally as this gives is the ability to deprecate it quickly.
+There is the possibility that similar and more generalised functionality will be added to upstream CAPI. If this happens and it meets our needs then we will refactor this code to work with the new mechanism and if required deprecate this feature. To mitigate the impact we should keep this feature as experimental for longer than we would normally do as this gives us the ability to deprecate it quickly.
 
 ## Upgrade Strategy
 
