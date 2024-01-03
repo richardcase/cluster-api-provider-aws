@@ -15,6 +15,7 @@
 
 # This has been copied from https://github.com/kubernetes-sigs/cluster-api/blob/release-1.1/hack/utils.sh
 
+
 # get_root_path returns the root path of the project source tree
 get_root_path() {
     git rev-parse --show-toplevel
@@ -25,3 +26,17 @@ cd_root_path() {
     cd "$(get_root_path)" || exit
 }
 
+# ensure GOPATH/bin is in PATH as we may install binaries to that directory in
+# other ensure-* scripts, and expect them to be found in PATH later on
+verify_gopath_bin() {
+    local gopath_bin
+
+    gopath_bin="$(go env GOPATH)/bin"
+    if ! printenv PATH | grep -q "${gopath_bin}"; then
+        cat <<EOF
+error: \$GOPATH/bin=${gopath_bin} is not in your PATH.
+See https://go.dev/doc/gopath_code for more instructions.
+EOF
+        return 2
+    fi
+}
