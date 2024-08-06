@@ -63,4 +63,8 @@ type SGScope interface {
 	// NodePortServicesAllowedCidrs returns the cidr blocks to be used as the allowed sources in the node port services
 	// security group rule. Defaults to 0.0.0.0/0
 	NodePortServicesAllowedCidrs() []string
+
+	// DefaultAllowedAPIServerSources returns the cidr blocks to be used as the default allowed sources in the api server
+	// security group inbound rule. Defaults to 0.0.0.0/0 for IPv4 and the equivalent for IPV6.
+	DefaultAllowedAPIServerSources(ipv6 bool) []string
 }
