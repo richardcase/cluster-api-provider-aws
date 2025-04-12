@@ -6,12 +6,12 @@ spec:
   clusterNetwork:
     pods:
       cidrBlocks:
-      - 192.168.0.0/16
+        - 192.168.0.0/16
   topology:
-    class: capa-e2e-eks
+    class: eks-e2e
     version: "${KUBERNETES_VERSION}"
     workers:
       machineDeployments:
-      - class: default-worker
-        name: md-0
-        replicas: ${WORKER_MACHINE_COUNT}
+        - class: default-worker
+          name: md-0
+          replicas: ${WORKER_MACHINE_COUNT}
